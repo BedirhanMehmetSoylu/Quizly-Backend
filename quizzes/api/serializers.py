@@ -41,6 +41,8 @@ class QuizDetailPublicSerializer(serializers.ModelSerializer):
             "questions",
         ]
 
+    read_only_fields = ["id", "created_at", "updated_at", "video_url", "questions"]
+
 
 class QuestionListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -121,3 +123,34 @@ class QuizCreateSerializer(serializers.Serializer):
         if "youtube.com" not in value and "youtu.be" not in value:
             raise serializers.ValidationError("Invalid YouTube URL.")
         return value
+    
+
+class QuizUpdateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Quiz
+        fields = ["title", "description", "video_url"]
+        extra_kwargs = {
+            "title": {"required": False},
+            "description": {"required": False},
+            "video_url": {"required": False},
+        }
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError(
+                "At least one valid field must be provided."
+            )
+        return attrs
+    
+    def to_internal_value(self, data):
+        allowed = set(self.fields.keys())
+        received = set(data.keys())
+
+        unknown = received - allowed
+        if unknown:
+            raise serializers.ValidationError(
+                {field: "This field is not allowed." for field in unknown}
+            )
+
+        return super().to_internal_value(data)

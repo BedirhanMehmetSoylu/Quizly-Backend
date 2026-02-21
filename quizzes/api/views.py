@@ -3,23 +3,16 @@ from rest_framework.response import Response
 from rest_framework.exceptions import APIException, PermissionDenied, NotFound
 from django.conf import settings
 from quizzes.models import Quiz, Question
-from .serializers import QuizDetailPublicSerializer, QuizDetailSerializer, QuizListSerializer, QuizSerializer, QuizCreateSerializer
+from .serializers import QuizDetailPublicSerializer, QuizDetailSerializer, QuizListSerializer, QuizCreateSerializer, QuizUpdateSerializer
 from quizzes.services.quiz_generator import generate_quiz_from_youtube
 
 
-class QuizListCreateView(generics.ListCreateAPIView):
+class QuizCreateView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Quiz.objects.filter(user=self.request.user)
-
-    def get_serializer_class(self):
-        if self.request.method == "POST":
-            return QuizDetailSerializer
-        return QuizListSerializer
+    serializer_class = QuizCreateSerializer
 
     def create(self, request, *args, **kwargs):
-        serializer = QuizCreateSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         video_url = serializer.validated_data["url"]
@@ -57,18 +50,40 @@ class QuizListCreateView(generics.ListCreateAPIView):
         )
 
 
-class QuizDetailView(generics.RetrieveUpdateDestroyAPIView):
+class QuizListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = QuizDetailPublicSerializer
+    serializer_class = QuizListSerializer
 
     def get_queryset(self):
-        return Quiz.objects.all()
+        return Quiz.objects.filter(user=self.request.user)
 
-    def get_object(self):
-        obj = super().get_object()
 
-        if obj.user != self.request.user:
-            raise PermissionDenied("Access denied - Quiz belongs to another user.")
+class QuizDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-        return obj
+    def get_queryset(self):
+        return Quiz.objects.filter(user=self.request.user)
 
+    def get_serializer_class(self):
+        if self.request.method in ["PATCH", "PUT"]:
+            return QuizUpdateSerializer
+        return QuizDetailPublicSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        serializer = QuizUpdateSerializer(
+            instance,
+            data=request.data,
+            partial=partial
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        response_serializer = QuizDetailPublicSerializer(instance)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK
+        )
