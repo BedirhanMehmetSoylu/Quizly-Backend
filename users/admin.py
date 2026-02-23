@@ -4,6 +4,16 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 
 class UserAdmin(BaseUserAdmin):
+    """
+    Custom admin configuration for the Django User model.
+
+    Enhances the default admin interface by:
+    - Displaying additional fields in the list view
+    - Enabling filtering by permission flags
+    - Allowing search by username and email
+    - Ordering users by their primary key
+    """
+    
     list_display = ('id', 'username', 'email', 'is_staff', 'is_superuser', 'is_active')
 
     list_filter = ('is_staff', 'is_superuser', 'is_active')
