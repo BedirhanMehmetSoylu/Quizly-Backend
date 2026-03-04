@@ -1,94 +1,50 @@
+"""
+Admin configuration for Quiz, Question and QuestionOption models.
+"""
+
 from django.contrib import admin
-from django.db.models import Count
-from .models import Quiz, Question
+from .models import Quiz, Question, QuestionOption
 
 
-class QuestionInline(admin.TabularInline):
+class QuestionOptionInline(admin.TabularInline):
+    """Inline editor for answer options within a question."""
+
+    model = QuestionOption
+    extra = 0
+
+
+class QuestionInline(admin.StackedInline):
+    """Inline editor for questions within a quiz."""
+
     model = Question
     extra = 0
-    fields = (
-        "question_title",
-        "question_options",
-        "answer",
-        "created_at",
-        "updated_at",
-    )
-    readonly_fields = ("created_at", "updated_at")
     show_change_link = True
 
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
+    """Admin view for quizzes – supports editing title, description and video URL."""
 
-    list_display = (
-        "id",
-        "title",
-        "user",
-        "is_completed",
-        "score",
-        "question_count",
-        "created_at",
-    )
-
-    list_filter = (
-        "is_completed",
-        "created_at",
-        "user",
-    )
-
-    search_fields = (
-        "title",
-        "description",
-        "user__username",
-        "user__email",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
-
+    list_display = ["id", "title", "created_by", "created_at"]
+    list_filter = ["created_by", "created_at"]
+    search_fields = ["title", "description"]
+    readonly_fields = ["created_at", "updated_at"]
     inlines = [QuestionInline]
-
-    ordering = ("-created_at",)
-
-    list_select_related = ("user",)
-
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        return queryset.annotate(
-            _question_count=Count("questions")
-        )
-
-    def question_count(self, obj):
-        return obj._question_count
-
-    question_count.short_description = "Questions"
 
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
+    """Admin view for questions – supports editing title and correct answer."""
 
-    list_display = (
-        "id",
-        "question_title",
-        "quiz",
-        "created_at",
-    )
+    list_display = ["id", "quiz", "question_title", "answer"]
+    list_filter = ["quiz"]
+    search_fields = ["question_title"]
+    inlines = [QuestionOptionInline]
 
-    list_filter = (
-        "quiz",
-        "created_at",
-    )
 
-    search_fields = (
-        "question_title",
-        "quiz__title",
-    )
+@admin.register(QuestionOption)
+class QuestionOptionAdmin(admin.ModelAdmin):
+    """Admin view for individual answer options."""
 
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
-
-    list_select_related = ("quiz",)
+    list_display = ["id", "question", "text"]
+    list_filter = ["question__quiz"]

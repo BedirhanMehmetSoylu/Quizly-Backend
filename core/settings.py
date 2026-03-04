@@ -69,8 +69,8 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'users.authentication.CookieJWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "quizzes.api.authentication.CookieJWTAuthentication",
     ),
 }
 

@@ -14,48 +14,23 @@ class RegisterSerializer(serializers.ModelSerializer):
     confirmed_password = serializers.CharField(write_only=True)
 
     class Meta:
-        """
-        Serializer configuration.
-
-        Attributes:
-            model: The Django User model.
-            fields: Fields included in the registration process.
-            extra_kwargs: Ensures the password is write-only.
-        """
         model = User
-        fields = ['username', 'email', 'password', 'confirmed_password']
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = ["username", "email", "password", "confirmed_password"]
+        extra_kwargs = {"password": {"write_only": True}}
+
+    def validate_email(self, value):
+        """Ensure the email address is not already registered."""
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
 
     def validate(self, data):
-        """
-        Validate that password and confirmed_password match.
-
-        Args:
-            data (dict): Incoming validated serializer data.
-
-        Returns:
-            dict: Validated data if passwords match.
-
-        Raises:
-            ValidationError: If passwords do not match.
-        """
-        if data['password'] != data['confirmed_password']:
+        """Validate that password and confirmed_password match."""
+        if data["password"] != data["confirmed_password"]:
             raise serializers.ValidationError("Passwords do not match.")
         return data
 
     def create(self, validated_data):
-        """
-        Create a new user instance with a hashed password.
-
-        Removes the confirmation field and delegates user creation
-        to Django's `create_user` method to ensure proper password hashing.
-
-        Args:
-            validated_data (dict): Fully validated user data.
-
-        Returns:
-            User: The created User instance.
-        """
-        validated_data.pop('confirmed_password')
-        user = User.objects.create_user(**validated_data)
-        return user
+        """Create a new user with a hashed password."""
+        validated_data.pop("confirmed_password")
+        return User.objects.create_user(**validated_data)
