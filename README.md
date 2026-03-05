@@ -80,12 +80,19 @@ cp .env.example .env
 Open `.env` and fill in your values:
 
 ```env
+SECRET_KEY=your_django_secret_key
+DEBUG=True
 GEMINI_API_KEY=your_google_gemini_api_key
 WHISPER_MODEL=base
+ALLOWED_HOSTS=127.0.0.1,localhost
+CORS_ALLOWED_ORIGINS=http://localhost:5500,http://127.0.0.1:5500
 ```
 
+> **SECRET_KEY** – Generate one with python manage.py shell → from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())  
 > **GEMINI_API_KEY** – Get yours at https://aistudio.google.com/apikey  
-> **WHISPER_MODEL** – `tiny` · `base` · `small` · `medium` · `large` (larger = more accurate, slower)
+> **WHISPER_MODEL** – `tiny` · `base` · `small` · `medium` · `large` (larger = more accurate, slower)  
+> **CORS_ALLOWED_ORIGINS** – Add any additional frontend origins separated by comma
+
 
 ### 5. Apply migrations
 
@@ -147,7 +154,7 @@ Quizly-Backend/
 | `POST` | `/api/logout/` | Logout and blacklist refresh token | ✅ |
 | `POST` | `/api/token/refresh/` | Issue new access token | ❌ |
 
-**Register** – `POST /api/users/register/`
+**Register** – `POST /api/register/`
 ```json
 {
   "username": "john",
@@ -157,7 +164,7 @@ Quizly-Backend/
 }
 ```
 
-**Login** – `POST /api/users/login/`
+**Login** – `POST /api/login/`
 ```json
 {
   "username": "john",
@@ -220,7 +227,7 @@ Authentication is handled via **JWT tokens in HTTP-only cookies**. The frontend 
 
 ```
 POST /login
-  → sets access_token cookie  (valid 15 minutes)
+  → sets access_token cookie  (valid 30 minutes)
   → sets refresh_token cookie (valid 7 days)
 
 POST /token/refresh/
