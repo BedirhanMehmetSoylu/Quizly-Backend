@@ -11,13 +11,13 @@ The frontend for this project can be found here:
 
 | | |
 |---|---|
-| **Framework** | Django 4.2 + Django REST Framework |
+| **Framework** | Django 6.0.2 + Django REST Framework |
 | **Authentication** | JWT via HTTP-only Cookies (SimpleJWT) |
 | **YouTube Download** | yt-dlp |
 | **Transcription** | OpenAI Whisper (runs locally) |
 | **Quiz Generation** | Google Gemini 2.5 Flash |
 | **Database** | SQLite (development) |
-| **Language** | Python 3.11+ |
+| **Language** | Python 3.12+ |
 
 ---
 
