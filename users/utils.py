@@ -1,10 +1,9 @@
 """
-auth/utils.py
-─────────────
 Helper functions for authentication views.
 Business logic is kept here to keep views thin and focused.
 """
 
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
@@ -15,15 +14,22 @@ def generate_tokens_for_user(user):
     return str(refresh.access_token), str(refresh)
 
 
-def set_auth_cookies(response, access_token, refresh_token):
-    """Attach JWT access and refresh tokens as HTTP-only cookies to a response."""
+def set_access_cookie(response, access_token):
+    """Attach the access token as an HTTP-only cookie matching ACCESS_TOKEN_LIFETIME."""
     response.set_cookie(
         key="access_token", value=access_token,
-        httponly=True, secure=False, samesite="Lax", max_age=15 * 60
+        httponly=True, secure=False, samesite="Lax",
+        max_age=int(api_settings.ACCESS_TOKEN_LIFETIME.total_seconds()),
     )
+
+
+def set_auth_cookies(response, access_token, refresh_token):
+    """Attach JWT access and refresh tokens as HTTP-only cookies to a response."""
+    set_access_cookie(response, access_token)
     response.set_cookie(
         key="refresh_token", value=refresh_token,
-        httponly=True, secure=False, samesite="Lax", max_age=7 * 24 * 60 * 60
+        httponly=True, secure=False, samesite="Lax",
+        max_age=int(api_settings.REFRESH_TOKEN_LIFETIME.total_seconds()),
     )
 
 

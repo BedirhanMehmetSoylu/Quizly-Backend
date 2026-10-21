@@ -1,6 +1,4 @@
 """
-quiz/urls.py
-────────────
 URL routing configuration for the quiz application.
 
 Defines REST-style endpoints for listing, creating,

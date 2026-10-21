@@ -1,6 +1,4 @@
 """
-auth/views.py
-─────────────
 API views for user authentication using JWT and HTTP-only cookies.
 All business logic lives in utils.py – views only handle HTTP in/out.
 """
@@ -15,6 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from .serializers import RegisterSerializer
 from ..utils import (
     generate_tokens_for_user,
+    set_access_cookie,
     set_auth_cookies,
     delete_auth_cookies,
     blacklist_refresh_token,
@@ -62,10 +61,7 @@ class TokenRefreshView(APIView):
         except TokenError:
             return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
         response = Response({"detail": "Access token refreshed."}, status=status.HTTP_200_OK)
-        response.set_cookie(
-            key="access_token", value=new_access_token,
-            httponly=True, secure=False, samesite="Lax", max_age=15 * 60
-        )
+        set_access_cookie(response, new_access_token)
         return response
 
 
