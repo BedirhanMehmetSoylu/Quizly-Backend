@@ -1,0 +1,111 @@
+"""Tests for registration, login, token refresh and logout."""
+
+from django.contrib.auth.models import User
+from rest_framework import status
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+
+from .helpers import PASSWORD, create_user, login
+
+ACCESS_MAX_AGE = 30 * 60
+REFRESH_MAX_AGE = 7 * 24 * 60 * 60
+
+
+class RegisterTests(APITestCase):
+    url = "/api/register/"
+
+    def _payload(self, **overrides):
+        data = {
+            "username": "bob",
+            "email": "bob@example.com",
+            "password": PASSWORD,
+            "confirmed_password": PASSWORD,
+        }
+        data.update(overrides)
+        return data
+
+    def test_register_creates_user(self):
+        response = self.client.post(self.url, self._payload(), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(username="bob")
+        self.assertTrue(user.check_password(PASSWORD))
+
+    def test_register_rejects_mismatched_passwords(self):
+        response = self.client.post(self.url, self._payload(confirmed_password="other"), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(User.objects.filter(username="bob").exists())
+
+    def test_register_rejects_duplicate_email(self):
+        create_user("alice")
+        response = self.client.post(self.url, self._payload(email="alice@example.com"), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+
+
+class LoginTests(APITestCase):
+    def setUp(self):
+        self.user = create_user("alice")
+
+    def test_login_sets_http_only_cookies(self):
+        response = login(self.client)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["user"]["username"], "alice")
+        access = response.cookies["access_token"]
+        refresh = response.cookies["refresh_token"]
+        self.assertTrue(access.value)
+        self.assertTrue(refresh.value)
+        self.assertTrue(access["httponly"])
+        self.assertTrue(refresh["httponly"])
+        self.assertEqual(access["max-age"], ACCESS_MAX_AGE)
+        self.assertEqual(refresh["max-age"], REFRESH_MAX_AGE)
+
+    def test_login_does_not_return_tokens_in_body(self):
+        response = login(self.client)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_login_with_wrong_password_returns_401(self):
+        response = self.client.post(
+            "/api/login/", {"username": "alice", "password": "wrong"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn("access_token", response.cookies)
+
+
+class TokenRefreshTests(APITestCase):
+    def setUp(self):
+        create_user("alice")
+
+    def test_refresh_sets_new_access_cookie(self):
+        login(self.client)
+        response = self.client.post("/api/token/refresh/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.cookies["access_token"]["max-age"], ACCESS_MAX_AGE)
+
+    def test_refresh_without_cookie_returns_401(self):
+        response = self.client.post("/api/token/refresh/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class LogoutTests(APITestCase):
+    def setUp(self):
+        create_user("alice")
+
+    def test_logout_blacklists_refresh_token_and_clears_cookies(self):
+        refresh_token = login(self.client).cookies["refresh_token"].value
+
+        response = self.client.post("/api/logout/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(BlacklistedToken.objects.count(), 1)
+        self.assertEqual(response.cookies["access_token"].value, "")
+        self.assertEqual(response.cookies["refresh_token"].value, "")
+
+        # The old refresh token must no longer issue new access tokens.
+        self.client.cookies["refresh_token"] = refresh_token
+        response = self.client.post("/api/token/refresh/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_requires_authentication(self):
+        response = self.client.post("/api/logout/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
