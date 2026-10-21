@@ -22,7 +22,32 @@ from .models import Quiz, Question, QuestionOption
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
+
+
+class QuizPipelineError(Exception):
+    """Base class for all errors raised by the quiz creation pipeline."""
+
+
+class VideoUnavailableError(QuizPipelineError):
+    """The video does not exist, is private or the URL is not supported."""
+
+
+class DownloadError(QuizPipelineError):
+    """YouTube could not be reached or refused the download."""
+
+
+class TranscriptionError(QuizPipelineError):
+    """Whisper could not transcribe the audio."""
+
+
+class GeminiError(QuizPipelineError):
+    """The Gemini API failed or returned unusable data."""
+
+
+class ConfigurationError(QuizPipelineError):
+    """A required setting (e.g. the API key) is missing."""
 
 GEMINI_PROMPT_TEMPLATE = """
 You are a quiz creation assistant.
@@ -49,6 +74,22 @@ Transcript:
 """
 
 
+class _YtDlpLogger:
+    """Forward yt-dlp output to Python logging instead of stdout."""
+
+    def debug(self, msg):
+        logger.debug(msg)
+
+    def info(self, msg):
+        logger.info(msg)
+
+    def warning(self, msg):
+        logger.warning(msg)
+
+    def error(self, msg):
+        logger.error(msg)
+
+
 def _build_ydl_opts(output_dir: str) -> dict:
     """Return yt-dlp options for mp3 audio extraction."""
     return {
@@ -56,7 +97,7 @@ def _build_ydl_opts(output_dir: str) -> dict:
         "outtmpl": os.path.join(output_dir, "%(id)s.%(ext)s"),
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "128"}],
         "quiet": True,
-        "no_warnings": True,
+        "logger": _YtDlpLogger(),
     }
 
 
@@ -65,13 +106,15 @@ def download_audio(youtube_url: str, output_dir: str) -> str:
     try:
         with yt_dlp.YoutubeDL(_build_ydl_opts(output_dir)) as ydl:
             info = ydl.extract_info(youtube_url, download=True)
-            audio_path = os.path.join(output_dir, f"{info['id']}.mp3")
-            if not os.path.exists(audio_path):
-                raise FileNotFoundError(f"Audio file not found at {audio_path}")
-            return audio_path
-    except Exception as exc:
-        logger.error("Audio download failed for %s: %s", youtube_url, exc)
-        raise ValueError(f"Could not download audio: {exc}") from exc
+    except yt_dlp.utils.DownloadError as exc:
+        cause = exc.exc_info[1] if exc.exc_info else None
+        if isinstance(cause, yt_dlp.utils.ExtractorError) and cause.expected:
+            raise VideoUnavailableError(str(exc)) from exc
+        raise DownloadError(str(exc)) from exc
+    audio_path = os.path.join(output_dir, f"{info['id']}.mp3")
+    if not os.path.exists(audio_path):
+        raise DownloadError(f"Audio file not found at {audio_path} (is ffmpeg installed?)")
+    return audio_path
 
 
 def transcribe_audio(audio_path: str) -> str:
@@ -83,15 +126,14 @@ def transcribe_audio(audio_path: str) -> str:
             raise ValueError("Whisper returned an empty transcript.")
         return text
     except Exception as exc:
-        logger.error("Transcription failed for %s: %s", audio_path, exc)
-        raise ValueError(f"Could not transcribe audio: {exc}") from exc
+        raise TranscriptionError(f"Could not transcribe {audio_path}: {exc}") from exc
 
 
 def _call_gemini(prompt: str) -> str:
     """Send a prompt to Gemini and return the raw response text."""
     client = genai.Client(api_key=GEMINI_API_KEY)
     response = client.models.generate_content(
-        model="models/gemini-2.5-flash",
+        model=GEMINI_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json"),
     )
@@ -106,33 +148,34 @@ def _parse_gemini_response(raw: str) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
         logger.error("Gemini returned invalid JSON: %s", raw[:500])
-        raise ValueError(f"Gemini returned invalid JSON: {exc}") from exc
+        raise GeminiError(f"Gemini returned invalid JSON: {exc}") from exc
 
 
 def _validate_quiz_data(data: dict) -> None:
     """Validate the structure of the Gemini quiz response."""
+    if not isinstance(data, dict):
+        raise GeminiError("Gemini response is not a JSON object.")
     required_keys = {"title", "description", "questions"}
     if not required_keys.issubset(data):
-        raise ValueError(f"Missing keys in Gemini response: {required_keys - data.keys()}")
+        raise GeminiError(f"Missing keys in Gemini response: {required_keys - data.keys()}")
     if not isinstance(data["questions"], list) or not data["questions"]:
-        raise ValueError("Gemini response contains no questions.")
+        raise GeminiError("Gemini response contains no questions.")
     for i, q in enumerate(data["questions"]):
-        if not {"question_title", "question_options", "answer"}.issubset(q):
-            raise ValueError(f"Question {i} is missing required fields.")
+        if not isinstance(q, dict) or not {"question_title", "question_options", "answer"}.issubset(q):
+            raise GeminiError(f"Question {i} is missing required fields.")
         if q["answer"] not in q["question_options"]:
-            raise ValueError(f"Question {i}: answer is not in question_options.")
+            raise GeminiError(f"Question {i}: answer is not in question_options.")
 
 
 def generate_quiz_data(transcript: str) -> dict:
     """Send the transcript to Gemini and return the validated quiz dict."""
     if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY is not set in the environment.")
+        raise ConfigurationError("GEMINI_API_KEY is not set in the environment.")
     try:
         prompt = GEMINI_PROMPT_TEMPLATE.format(transcript=transcript)
         raw = _call_gemini(prompt)
     except Exception as exc:
-        logger.error("Gemini API call failed: %s", exc)
-        raise ValueError(f"Gemini API error: {exc}") from exc
+        raise GeminiError(f"Gemini API call failed (model {GEMINI_MODEL}): {exc}") from exc
     data = _parse_gemini_response(raw)
     _validate_quiz_data(data)
     return data
