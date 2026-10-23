@@ -315,6 +315,16 @@ Check the server log (the terminal running `runserver`) first. Warnings from yt-
 | `502` on quiz creation, log shows `404 NOT_FOUND` / `model ... is no longer available` | The configured Gemini model was retired or is not available for your key | Pick a current model from https://ai.google.dev/gemini-api/docs/models and set it as `GEMINI_MODEL` in `.env`. |
 | `502` on quiz creation, log shows `503 UNAVAILABLE` / `high demand` | Gemini is temporarily overloaded | Wait a moment and try again, or switch `GEMINI_MODEL` to another model. |
 | Quiz creation takes very long | Long video, large `WHISPER_MODEL`, or the Whisper model is downloaded on the first run | Use a shorter video or a smaller `WHISPER_MODEL` (e.g. `tiny` or `base`). |
+| Login succeeds in the frontend, but every following request returns `401` | The frontend is opened via `http://localhost:…` while it calls the API at `http://127.0.0.1:8000`. For the browser these are different sites, so the `SameSite=Lax` auth cookies are not sent. | Open the frontend via `http://127.0.0.1:5500` (same host as `API_BASE_URL` in the frontend's `shared/js/config.js`). |
+
+---
+
+## Known Limitations
+
+These concern the [Quizly Frontend](https://github.com/Developer-Akademie-Backendkurs/project.Quizly), which is used as provided and not modified in this project:
+
+- **Quiz creation errors are shown generically.** The backend returns a specific message in `detail` (e.g. "This video is unavailable…"), but the frontend always shows "Error generating quiz".
+- **Registration errors are shown incompletely.** The frontend only displays the `username` field error. Other errors (e.g. email already registered, passwords don't match) appear as "Register failed: undefined". The API response itself contains the correct error message.
 
 ---
 
