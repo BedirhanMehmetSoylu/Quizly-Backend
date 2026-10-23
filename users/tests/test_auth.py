@@ -3,7 +3,7 @@
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from .helpers import PASSWORD, create_user, login
 
@@ -106,6 +106,34 @@ class LogoutTests(APITestCase):
         response = self.client.post("/api/token/refresh/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_logout_requires_authentication(self):
+    def test_logout_with_expired_access_cookie_still_blacklists_refresh_token(self):
+        refresh_token = login(self.client).cookies["refresh_token"].value
+        # The browser drops the access cookie once its max-age has passed.
+        del self.client.cookies["access_token"]
+
         response = self.client.post("/api/logout/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(BlacklistedToken.objects.count(), 1)
+        self.assertEqual(response.cookies["access_token"].value, "")
+        self.assertEqual(response.cookies["refresh_token"].value, "")
+
+        self.client.cookies["refresh_token"] = refresh_token
+        response = self.client.post("/api/token/refresh/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_with_invalid_access_cookie_still_succeeds(self):
+        login(self.client)
+        self.client.cookies["access_token"] = "not-a-jwt"
+
+        response = self.client.post("/api/logout/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(BlacklistedToken.objects.count(), 1)
+
+    def test_logout_without_cookies_succeeds_without_blacklisting(self):
+        response = self.client.post("/api/logout/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(OutstandingToken.objects.count(), 0)
+        self.assertEqual(BlacklistedToken.objects.count(), 0)

@@ -167,7 +167,7 @@ The API is now available at `http://127.0.0.1:8000`.
 python manage.py test
 ```
 
-The test suite covers registration, login with cookies, token refresh, logout with token blacklisting, quiz creation (including all error cases), listing/updating/deleting quizzes, access to other users' quizzes and unauthenticated access, as well as parsing and validation of Gemini responses.
+The test suite covers registration, login with cookies, token refresh, logout with token blacklisting (also with an expired access cookie), quiz creation (including all error cases), listing/updating/deleting quizzes, access to other users' quizzes and unauthenticated access, as well as parsing and validation of Gemini responses.
 
 **No API keys, no internet connection and no Whisper model are needed.** The pipeline steps (`download_audio`, `transcribe_audio`, `_call_gemini`) are replaced by mocks, and the tests run against a temporary in-memory database.
 
@@ -187,7 +187,7 @@ All endpoints are prefixed with `/api/`. Error responses have the form `{"detail
 | `POST` | `/api/register/` | Register a new user | ❌ | `201` created · `400` invalid data, passwords don't match or email taken |
 | `POST` | `/api/login/` | Login and receive JWT cookies | ❌ | `200` OK · `401` invalid credentials |
 | `POST` | `/api/token/refresh/` | Issue a new access token cookie | ❌ (refresh cookie) | `200` OK · `401` refresh token missing, invalid or blacklisted |
-| `POST` | `/api/logout/` | Blacklist refresh token and delete cookies | ✅ | `200` OK · `401` not logged in |
+| `POST` | `/api/logout/` | Blacklist refresh token and delete cookies | ❌ (refresh cookie) | `200` OK (also with an expired access cookie or no cookies at all) |
 | `GET` | `/api/quizzes/` | List all quizzes of the logged-in user | ✅ | `200` OK · `401` not logged in |
 | `POST` | `/api/quizzes/` | Create a quiz from a YouTube URL | ✅ | `201` created · `400` invalid URL or video unavailable/private · `401` not logged in · `502` YouTube or Gemini error · `500` server error |
 | `GET` | `/api/quizzes/{id}/` | Get a quiz with all questions | ✅ | `200` OK · `401` not logged in · `403` quiz belongs to another user · `404` not found |
@@ -276,8 +276,9 @@ POST /api/token/refresh/
   → sets new access_token cookie (valid 30 minutes)
 
 POST /api/logout/
-  → blacklists refresh_token
+  → blacklists refresh_token (if present)
   → deletes both cookies
+  → works without a valid access token, so an expired session can always be ended
 ```
 
 Cookie lifetimes are taken from `ACCESS_TOKEN_LIFETIME` and `REFRESH_TOKEN_LIFETIME` in `SIMPLE_JWT` (`core/settings.py`).

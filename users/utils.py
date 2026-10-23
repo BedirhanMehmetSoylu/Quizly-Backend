@@ -39,8 +39,10 @@ def delete_auth_cookies(response):
     response.delete_cookie("refresh_token")
 
 
-def blacklist_refresh_token(refresh_token: str) -> None:
-    """Blacklist a refresh token string. Silently ignores invalid tokens."""
+def blacklist_refresh_token(refresh_token: str | None) -> None:
+    """Blacklist a refresh token string. Silently ignores missing or invalid tokens."""
+    if not refresh_token:
+        return
     try:
         RefreshToken(refresh_token).blacklist()
     except TokenError:
