@@ -1,14 +1,23 @@
 """Tests for registration, login, token refresh and logout."""
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+from rest_framework_simplejwt.tokens import AccessToken
 
 from .helpers import PASSWORD, create_user, login
 
 ACCESS_MAX_AGE = 30 * 60
 REFRESH_MAX_AGE = 7 * 24 * 60 * 60
+
+
+def expired_access_token(user) -> str:
+    token = AccessToken.for_user(user)
+    token.set_exp(lifetime=timedelta(seconds=-1))
+    return str(token)
 
 
 class RegisterTests(APITestCase):
@@ -137,3 +146,54 @@ class LogoutTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(OutstandingToken.objects.count(), 0)
         self.assertEqual(BlacklistedToken.objects.count(), 0)
+
+
+class StaleAccessCookieTests(APITestCase):
+    """Public auth endpoints must ignore an invalid or expired access cookie."""
+
+    def setUp(self):
+        self.user = create_user("alice")
+        self.stale_cookies = {
+            "invalid": "not-a-jwt",
+            "expired": expired_access_token(self.user),
+        }
+
+    def test_register_ignores_stale_access_cookie(self):
+        for kind, cookie in self.stale_cookies.items():
+            with self.subTest(kind=kind):
+                self.client.cookies["access_token"] = cookie
+                response = self.client.post(
+                    "/api/register/",
+                    {
+                        "username": f"bob_{kind}",
+                        "email": f"bob_{kind}@example.com",
+                        "password": PASSWORD,
+                        "confirmed_password": PASSWORD,
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_login_ignores_stale_access_cookie(self):
+        for kind, cookie in self.stale_cookies.items():
+            with self.subTest(kind=kind):
+                self.client.cookies["access_token"] = cookie
+                response = login(self.client)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertTrue(response.cookies["access_token"].value)
+
+    def test_refresh_ignores_stale_access_cookie(self):
+        for kind, cookie in self.stale_cookies.items():
+            with self.subTest(kind=kind):
+                login(self.client)
+                self.client.cookies["access_token"] = cookie
+                response = self.client.post("/api/token/refresh/")
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.cookies["access_token"]["max-age"], ACCESS_MAX_AGE)
+
+    def test_protected_endpoints_still_reject_stale_access_cookie(self):
+        for kind, cookie in self.stale_cookies.items():
+            with self.subTest(kind=kind):
+                self.client.cookies["access_token"] = cookie
+                response = self.client.get("/api/quizzes/")
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

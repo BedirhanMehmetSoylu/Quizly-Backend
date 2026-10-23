@@ -1,6 +1,9 @@
 """
 API views for user authentication using JWT and HTTP-only cookies.
 All business logic lives in utils.py – views only handle HTTP in/out.
+
+The public endpoints (register, login, refresh, logout) disable access token
+authentication, so a stale or invalid access cookie never blocks them with a 401.
 """
 
 from django.contrib.auth import authenticate
@@ -25,6 +28,9 @@ from ..utils import (
 class RegisterView(APIView):
     """Register a new user account."""
 
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
     def post(self, request):
         """Validate input and create a new user. Returns 201 on success."""
         serializer = RegisterSerializer(data=request.data)
@@ -36,6 +42,9 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """Authenticate a user and issue JWT tokens via HTTP-only cookies."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
         """Validate credentials and set auth cookies. Returns 200 on success."""
@@ -50,6 +59,9 @@ class LoginView(APIView):
 
 class TokenRefreshView(APIView):
     """Issue a new access token from the refresh token cookie."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
         """Read refresh cookie, validate it, and return a new access token cookie."""
