@@ -11,14 +11,7 @@ The frontend for this project can be found here:
 
 ## Demo
 
-<!-- TODO: Add a demo link and/or screenshots here, e.g.:
-[Live Demo](https://example.com)
-
-![Quiz list](docs/screenshots/quiz-list.png)
-![Quiz detail](docs/screenshots/quiz-detail.png)
--->
-
-*Demo link and screenshots coming soon.*
+▶️ [Demo video](https://youtu.be/Y1HgYNzrFAg) (about 1.5 minutes, pipeline waiting time shortened)
 
 ---
 
