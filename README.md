@@ -349,6 +349,7 @@ Quizly-Backend/
 │   ├── utils.py                # YouTube → Whisper → Gemini pipeline
 │   └── admin.py                # Admin panel configuration
 ├── .env.example                # Environment variable template
+├── LICENSE
 ├── requirements.txt
 └── manage.py
 ```
@@ -362,3 +363,9 @@ Available at `http://127.0.0.1:8000/admin/`
 - View, create, edit and delete quizzes
 - Edit individual questions and answer options inline
 - Manage user accounts
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
