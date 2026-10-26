@@ -4,7 +4,7 @@ Quizly turns any YouTube video into a multiple-choice quiz. A user submits a You
 
 This repository contains the **REST API backend** (Django + Django REST Framework). Authentication uses JWTs stored in HTTP-only cookies.
 
-The frontend for this project can be found here:
+**My part:** I designed and built this backend as part of the Developer Akademie backend course. The frontend was provided by the course and is used unchanged:
 👉 [Quizly Frontend](https://github.com/Developer-Akademie-Backendkurs/project.Quizly)
 
 ---
@@ -12,6 +12,16 @@ The frontend for this project can be found here:
 ## Demo
 
 ▶️ [Demo video](https://youtu.be/Y1HgYNzrFAg) (about 1.5 minutes, pipeline waiting time shortened)
+
+---
+
+## Highlights
+
+- **Secure cookie-based JWT auth** – Access and refresh tokens live in HTTP-only cookies, so JavaScript in the browser can never read them. Includes a refresh flow and refresh token blacklisting on logout.
+- **Multi-step AI pipeline** – YouTube audio download (yt-dlp) → local speech-to-text (Whisper) → quiz generation (Google Gemini in JSON mode). The AI response is validated (required fields present, correct answer must be one of the options) before anything is saved.
+- **Clear error handling** – Each pipeline failure raises its own exception type, which the API maps to a fitting status code (`400` / `502` / `500`) with a user-friendly message. Internal details only go to the server log.
+- **Per-user data isolation** – Every quiz belongs to its creator. Listing only returns your own quizzes, and accessing someone else's quiz is rejected with `403`.
+- **47 automated tests without external services** – yt-dlp, Whisper and Gemini are mocked, so the full test suite runs in a few seconds without internet access or API keys.
 
 ---
 
@@ -26,7 +36,7 @@ The frontend for this project can be found here:
 | **Quiz Generation** | Google Gemini (default: `gemini-3.8-flash`, configurable) |
 | **Database** | SQLite (development) |
 | **Tests** | Django `APITestCase` + `unittest.mock` |
-| **Language** | Python 3.12+ (tested with 3.13) |
+| **Language** | Python 3.13 |
 
 ---
 
@@ -318,6 +328,19 @@ These concern the [Quizly Frontend](https://github.com/Developer-Akademie-Backen
 
 - **Quiz creation errors are shown generically.** The backend returns a specific message in `detail` (e.g. "This video is unavailable…"), but the frontend always shows "Error generating quiz".
 - **Registration errors are shown incompletely.** The frontend only displays the `username` field error. Other errors (e.g. email already registered, passwords don't match) appear as "Register failed: undefined". The API response itself contains the correct error message.
+
+---
+
+## Possible Improvements
+
+Things I would change before running this in production:
+
+- **Asynchronous quiz creation** – Creating a quiz currently blocks a single HTTP request for 1–2 minutes. A task queue (e.g. Celery + Redis) could process the pipeline in the background while the client polls for the status.
+- **Load the Whisper model once** – The model is currently loaded on every request. Loading it once per process would noticeably speed up quiz creation.
+- **Fewer database queries** – Answer options are fetched with one query per question (N+1 problem). `prefetch_related` would load them in a single query.
+- **Atomic saving** – Wrapping the creation of a quiz, its questions and options in a database transaction would prevent half-saved quizzes if something fails midway.
+- **Rate limiting** – Quiz creation is expensive (CPU + paid AI API), so it should be throttled per user.
+- **Production setup** – PostgreSQL instead of SQLite, `Secure` cookies over HTTPS, `DEBUG=False`, Docker and a CI pipeline that runs the tests on every push.
 
 ---
 
